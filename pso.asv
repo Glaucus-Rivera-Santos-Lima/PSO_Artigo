@@ -1,0 +1,145 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%               Universidade Federal de Ouro Preto - UFOP               %%
+%%                  Instituto de Ciências Exatas - ICEA                  %%
+%%                                                                       %%
+%%                             ARTIGO - PSO                              %%
+%%                                                                       %%
+%% Autor:        Glaucus Rivera Santos Lima                              %%
+%% Orientador:   Dr. Carlos Henrique Nogueira de Resende Barbosa         %%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+clc
+close all
+clear all
+warning off;
+
+tic
+%% Adicionando pastas
+addpath('mathpower');
+addpath('sistemas');
+addpath('codigos');
+
+
+%% Dados iniciais para teste
+sistema = sistema300_caso2correto;    %sistema a ser simulado (sempre simular caso2, pq este pssui limites térmicos a serem considerados)
+
+
+%% INICIANDO ALGORITMO DO PSO - OTIMIZAÇÃO POR NUVEM DE PARTÍCULAS
+%% Inicializando parâmetros
+c1 = 1.55;                  %fator de sensibilidade individual
+c2 = 3.05;                  %fator de sensibilidade comunitária
+p = 100;                    %tamanho da população
+num_iteracoes = 150;        %número de iterações
+w_max = 0.9;                %inércia máxima
+w_min = 0.4;                %inércia mínima
+
+
+%% Janelamento
+sist = size(sistema.branch);
+qtd_linhas = sist(1);           %pegando a quantidade de linhas da matriz branch
+x_min = 1;
+x_max = qtd_linhas;
+
+
+%% Inicializando X (posição) e V (velocidade) randomicamente
+populacao = inicializa_populacao(p,x_min,x_max,sistema);        %é uma matriz de 4 colunas [posicaoinicial fitness velocidade Pbest_da_partícula]
+populacao = sortrows(populacao,2);                              %ordenando a população na matriz do menor ao maior fitness para achar Gbest
+
+
+%% Inicializando Pbest
+Pbest = populacao(:,4);          %melhor posição individual das partículas
+
+
+%% Inicializando Gbest
+Gbest = populacao{1,1};          %melhor posição global
+
+
+%% Iniciando processo de iteração do PSO
+cont_iteracao = 1;              %contador de iteração
+cont_piora = 1;                 %contador de piora das respostas
+limite = 0.30*num_iteracoes;    %limite para a piora das respostas = 30% do número máximo de iterações
+%vetor(1,1) = cont_iteracao;
+
+while cont_iteracao <= num_iteracoes && cont_piora <= limite
+    %Atualizando a posição da partícula a cada iteração
+    for i=1:p
+        posicao = populacao{i,1};
+        linha = posicao{1};
+        grau = posicao{2};
+        
+        %Atualizando posição
+        velocidade = populacao{i,3};                        %velocidade é a 3ª coluna da matriz populacao
+        linha = round(linha + velocidade(1));               %posição da linha é atualizada via velocidade(1)
+        grau = grau + velocidade(2);                        %posição de L é atualizada via velocidade(2)
+        
+        %Controle do limite da linha
+        if linha > qtd_linhas
+            linha = qtd_linhas;
+        elseif linha < 1
+            linha = 1;
+        end
+        
+        %Controle do limite do fator de compensação
+        if grau > 0.7
+            grau = 0.7;
+        elseif grau < 0.2
+            grau = 0.2;
+        end
+        
+        %Atualização da população que é capaz de descongestionar o sistema
+        posicao{1} = linha;
+        posicao{2} = grau;
+        [objetivo, congestionamento] = funcao_objetivo(sistema,posicao);
+        if congestionamento == 0                %verifica se a nova partícula é capaz de descongestionar o STEE
+            populacao{i,1} = posicao;
+            populacao{i,2} = objetivo;
+        end
+    end
+    
+    %Atualização do Pbest
+    if populacao{i,2} < funcao_objetivo(sistema,populacao{i,4})
+        populacao{i,4} = populacao{i,1};
+    end
+        
+    %Atualizando Gbest
+    populacao = sortrows(populacao,2);                              %ordenando a população novamente para pegar o Gbest
+    if populacao{1,2} < funcao_objetivo(sistema,Gbest)
+        Gbest = populacao{1,1};                                     %melhor posição global atualizada
+        cont_piora = 0;
+    else
+        cont_piora = cont_piora + 1;                                %analiso piora da resposta
+    end
+    
+    %Atualizando a velocidade
+    w = w_max-(w_max-w_min)*cont_iteracao/num_iteracoes;            %atualização do peso inercial de forma decrescente
+    
+    for i=1:p
+        velocidade = populacao{i,3};
+        posicao = populacao{i,1};
+        Pbest = populacao{i,4};
+        
+        %Duas velocidades a serem atualizadas: a que se relaciona à linha e a que se relaciona ao fator L
+        velocidade(1) = w*velocidade(1) + c1*rand()*(Pbest{1} - posicao{1}) + c2*rand()*(Gbest{1} - posicao{1});       % da linha
+        velocidade(2) = w*velocidade(2) + c1*rand()*(Pbest{2} - posicao{2}) + c2*rand()*(Gbest{2} - posicao{2});       % de L
+        
+        populacao{i,3} = velocidade;                 %atualização das duas velocidades
+    end
+    vetor(cont_iteracao,1) = cont_iteracao;
+    vetor(cont_iteracao,2) = funcao_objetivo(sistema,Gbest);
+    cont_iteracao = cont_iteracao + 1;               %incrementa o contador de iteração
+end
+
+plot(vetor(:,1), vetor(:,2));
+%% Resultados
+% posicao = populacao{1,1};
+% [objetivo, congestionamento] = funcao_objetivo(sistema, posicao);
+% posicao = populacao{1,1}
+% congestionamento
+% objetivo
+clc
+format bank
+disp(funcao_objetivo(sistema,Gbest))            %Valor da função objetivo
+disp(Gbest{1})                                  %Linha de alocação
+disp(Gbest{2})                                  %Valor de L
+disp(cont_iteracao)                             %Número de iterações necessárias
+toc

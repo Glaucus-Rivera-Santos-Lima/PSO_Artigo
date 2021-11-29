@@ -1,0 +1,5 @@
+sistema = sistema6_caso2correto;
+
+qtd_linhas = size(sistema.branch);
+
+for m = 1:qtd_linhas
